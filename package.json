@@ -1,0 +1,15 @@
+{
+  "name": "knockout-table",
+  "private": true,
+  "version": "1.0.0",
+  "description": "World Cup 2026 knockout bracket",
+  "scripts": {
+    "dev": "serve . -l 3000",
+    "build": "node scripts/build.mjs",
+    "vercel-build": "node scripts/build.mjs",
+    "preview": "serve dist -l 3000"
+  },
+  "devDependencies": {
+    "serve": "^14.2.4"
+  }
+}

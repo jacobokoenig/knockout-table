@@ -43,6 +43,23 @@
   .title{position:fixed;top:18px;right:24px;text-align:right;z-index:30;}
   .title h1{margin:0;font-size:15px;letter-spacing:.5px;font-weight:700;}
   .title p{margin:2px 0 0;font-size:12px;color:var(--muted);}
+  @media (max-width:640px){
+    .topbar{top:max(10px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));}
+    .title{
+      top:52px;left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));
+      text-align:center;
+    }
+    .title h1{font-size:13px;}
+    .title p{font-size:11px;}
+    .handle{
+      top:78px;left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));
+      text-align:center;font-size:11px;
+    }
+    .stage{padding-top:100px;min-height:calc(100vh - 100px);}
+  }
+  @media (hover:none),(pointer:coarse){
+    .ring-clickable{display:none;}
+  }
 </style>
 </head>
 <body>
@@ -87,6 +104,16 @@ const LEAVES = [
 ];
 
 const ROUND=["Round of 32","Round of 16","Quarter-final","Semi-final","Final","Champion"];
+/* FIFA match dates by bracket node (lvl, idx). R32 dates from confirmed fixtures (matches 73–88). */
+const MATCH_DATES={
+  1:["Jun 29, 2026","Jun 30, 2026","Jun 28, 2026","Jun 29, 2026","Jul 2, 2026","Jul 2, 2026",
+     "Jul 1, 2026","Jul 1, 2026","Jun 29, 2026","Jun 30, 2026","Jun 30, 2026","Jul 1, 2026",
+     "Jul 3, 2026","Jul 3, 2026","Jul 2, 2026","Jul 3, 2026"],
+  2:["Jul 4, 2026","Jul 4, 2026","Jul 6, 2026","Jul 6, 2026","Jul 5, 2026","Jul 5, 2026","Jul 7, 2026","Jul 7, 2026"],
+  3:["Jul 9, 2026","Jul 10, 2026","Jul 11, 2026","Jul 11, 2026"],
+  4:["Jul 14, 2026","Jul 15, 2026"],
+  5:["Jul 19, 2026"]
+};
 const R  =[438,345,256,176,104,0];                 // grid (positions) unchanged
 const SZ =[24,24,24,24,24,38].map(v=>v*1.15);       // constant flag size every round (+15%)
 const CX=500,CY=500;
@@ -114,12 +141,20 @@ function recompute(){
     else{n.winnerChild=null;n.team=null;}});
 }
 
-// share state <-> hash
+// share state <-> hash + localStorage
+const STORAGE_KEY="wc2026-knockout-bracket";
 const pickNodes=[];for(let l=1;l<=5;l++)levels[l].forEach(n=>pickNodes.push(n));
 const encode=()=>pickNodes.map(n=>n.winnerChild?(n.winnerChild===n.children[0]?"0":"1"):"-").join("");
 const syncHash=()=>{try{history.replaceState(null,"","#"+encode());}catch(e){}};
+const saveState=()=>{const s=encode();try{localStorage.setItem(STORAGE_KEY,s);}catch(e){}syncHash();};
+const clearState=()=>{try{localStorage.removeItem(STORAGE_KEY);}catch(e){}};
 function decode(s){if(!s)return;pickNodes.forEach((n,i)=>{const c=s[i];
   if(c==="0")n.winnerChild=n.children[0];else if(c==="1")n.winnerChild=n.children[1];});recompute();}
+function loadState(){
+  const hash=location.hash.replace(/^#/,"");
+  if(hash){decode(hash);try{localStorage.setItem(STORAGE_KEY,encode());}catch(e){}return;}
+  try{const stored=localStorage.getItem(STORAGE_KEY);if(stored)decode(stored);}catch(e){}
+}
 
 // static connectors + guides
 let CONN="";
@@ -132,7 +167,19 @@ for(let l=1;l<=5;l++){const Rp=R[l],Rc=R[l-1];
       `A${Rp} ${Rp} 0 0 1 ${p2[0].toFixed(1)} ${p2[1].toFixed(1)} L${ci2[0].toFixed(1)} ${ci2[1].toFixed(1)}"/>`;});}
 let GUIDE="";[R[0],R[1],R[2],R[3],R[4]].forEach(r=>GUIDE+=`<circle class="guide" cx="${CX}" cy="${CY}" r="${r}"/>`);
 
-let showLabels=false, animating=false, hideId=null;
+let showLabels=false, animating=false, hideId=null, tipHideTimer=null;
+
+function matchDate(n){
+  const slot=n.lvl===0?n.parent:n;
+  if(!slot||slot.lvl<1)return"";
+  return MATCH_DATES[slot.lvl]?.[slot.idx]||"";
+}
+function tipHtml(n){
+  const label=n.team?n.team.n:"To be decided";
+  const date=matchDate(n);
+  const meta=[ROUND[n.lvl],date].filter(Boolean).join(" · ");
+  return`${label}<span class="r">${meta}</span>`;
+}
 
 function flagDisc(x,y,r,emoji,id){
   const cid="clip-"+id;
@@ -147,7 +194,7 @@ function flagNode(n){
   const r=SZ[n.lvl];const[x,y]=polar(R[n.lvl],n.angle);
   const clickable=!!n.team&&!!n.parent;
   const hidden=(n.id===hideId);
-  let g=`<g class="node-hit ${clickable?"":"disabled"}" data-id="${n.id}">`;
+  let g=`<g class="node-hit ${clickable?"":"disabled"}${!n.team&&n.lvl>0?" dot-slot":""}" data-id="${n.id}">`;
   if(n.team&&!hidden){
     const advanced=n.parent&&n.parent.winnerChild===n;   // already moved to a later round
     g+=`<g opacity="${advanced?0.38:1}">`+flagDisc(x,y,r,n.team.e,n.id)+`</g>`;
@@ -217,28 +264,34 @@ function pick(n){
   animateAdvance(n,()=>{
     n.parent.winnerChild=n;
     let a=n.parent.parent;while(a){a.winnerChild=null;a=a.parent;}
-    recompute();syncHash();hideId=null;animating=false;render();
+    recompute();saveState();hideId=null;animating=false;render();
   });
 }
 
 // events
 const svg=document.getElementById("bracket");
-svg.addEventListener("click",e=>{const g=e.target.closest(".node-hit");
-  if(!g||g.classList.contains("disabled"))return;pick(byId[g.dataset.id]);});
 const tip=document.getElementById("tooltip");
-svg.addEventListener("mousemove",e=>{const g=e.target.closest(".node-hit");
-  if(!g){tip.style.opacity=0;return;}const n=byId[g.dataset.id];
-  tip.innerHTML=`${n.team?n.team.n:"To be decided"}<span class="r">${ROUND[n.lvl]}</span>`;
-  tip.style.left=e.clientX+"px";tip.style.top=e.clientY+"px";tip.style.opacity=1;});
-svg.addEventListener("mouseleave",()=>tip.style.opacity=0);
+const finePointer=window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+function showTip(n,x,y){tip.innerHTML=tipHtml(n);tip.style.left=x+"px";tip.style.top=y+"px";tip.style.opacity=1;}
+function hideTip(){tip.style.opacity=0;}
+svg.addEventListener("click",e=>{const g=e.target.closest(".node-hit");if(!g)return;
+  const n=byId[g.dataset.id];
+  if(g.classList.contains("dot-slot")&&!finePointer){
+    showTip(n,e.clientX,e.clientY);clearTimeout(tipHideTimer);tipHideTimer=setTimeout(hideTip,2500);return;}
+  if(g.classList.contains("disabled"))return;pick(n);});
+if(finePointer){
+  svg.addEventListener("mousemove",e=>{const g=e.target.closest(".dot-slot");
+    if(!g){hideTip();return;}showTip(byId[g.dataset.id],e.clientX,e.clientY);});
+  svg.addEventListener("mouseleave",hideTip);
+}
 
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600);}
-document.getElementById("resetBtn").onclick=()=>{if(animating)return;pickNodes.forEach(n=>{n.winnerChild=null;n.team=null;});recompute();syncHash();render();};
-document.getElementById("shareBtn").onclick=async()=>{syncHash();
+document.getElementById("resetBtn").onclick=()=>{if(animating)return;pickNodes.forEach(n=>{n.winnerChild=null;n.team=null;});recompute();clearState();syncHash();render();};
+document.getElementById("shareBtn").onclick=async()=>{saveState();
   try{await navigator.clipboard.writeText(location.href);toast("Link copied to clipboard");}
   catch{toast("Copy this URL from the address bar");}};
 
-decode(location.hash.replace(/^#/,""));
+loadState();
 render();
 </script>
 </body>
