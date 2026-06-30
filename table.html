@@ -104,16 +104,24 @@ const LEAVES = [
 ];
 
 const ROUND=["Round of 32","Round of 16","Quarter-final","Semi-final","Final","Champion"];
-/* FIFA match dates by bracket node (lvl, idx). R32 dates from confirmed fixtures (matches 73–88). */
-const MATCH_DATES={
-  1:["Jun 29, 2026","Jun 30, 2026","Jun 28, 2026","Jun 29, 2026","Jul 2, 2026","Jul 2, 2026",
-     "Jul 1, 2026","Jul 1, 2026","Jun 29, 2026","Jun 30, 2026","Jun 30, 2026","Jul 1, 2026",
-     "Jul 3, 2026","Jul 3, 2026","Jul 2, 2026","Jul 3, 2026"],
-  2:["Jul 4, 2026","Jul 4, 2026","Jul 6, 2026","Jul 6, 2026","Jul 5, 2026","Jul 5, 2026","Jul 7, 2026","Jul 7, 2026"],
-  3:["Jul 9, 2026","Jul 10, 2026","Jul 11, 2026","Jul 11, 2026"],
-  4:["Jul 14, 2026","Jul 15, 2026"],
-  5:["Jul 19, 2026"]
+/* FIFA kickoffs (UTC ISO) by bracket node (lvl, idx). R32 from confirmed fixtures (matches 73–88). */
+const MATCH_KICKOFFS={
+  1:["2026-06-29T20:30:00Z","2026-06-30T21:00:00Z","2026-06-28T19:00:00Z","2026-06-30T01:00:00Z",
+     "2026-07-02T23:00:00Z","2026-07-02T19:00:00Z","2026-07-02T00:00:00Z","2026-07-01T20:00:00Z",
+     "2026-06-29T17:00:00Z","2026-06-30T17:00:00Z","2026-07-01T01:00:00Z","2026-07-01T16:00:00Z",
+     "2026-07-03T22:00:00Z","2026-07-03T18:00:00Z","2026-07-03T03:00:00Z","2026-07-04T01:30:00Z"],
+  2:["2026-07-04T17:00:00Z","2026-07-04T21:00:00Z","2026-07-06T19:00:00Z","2026-07-07T00:00:00Z",
+     "2026-07-05T19:00:00Z","2026-07-06T01:00:00Z","2026-07-07T19:00:00Z","2026-07-08T00:00:00Z"],
+  3:["2026-07-09T20:00:00Z","2026-07-10T19:00:00Z","2026-07-11T21:00:00Z","2026-07-12T01:00:00Z"],
+  4:["2026-07-14T19:00:00Z","2026-07-15T19:00:00Z"],
+  5:["2026-07-19T19:00:00Z"]
 };
+const localDateFmt=new Intl.DateTimeFormat(undefined,{month:"short",day:"numeric",year:"numeric"});
+function formatLocalDate(iso){
+  if(!iso)return"";
+  const d=new Date(iso);
+  return Number.isNaN(d.getTime())?"":localDateFmt.format(d);
+}
 const R  =[438,345,256,176,104,0];                 // grid (positions) unchanged
 const SZ =[24,24,24,24,24,38].map(v=>v*1.15);       // constant flag size every round (+15%)
 const CX=500,CY=500;
@@ -172,7 +180,7 @@ let showLabels=false, animating=false, hideId=null, tipHideTimer=null;
 function matchDate(n){
   const slot=n.lvl===0?n.parent:n;
   if(!slot||slot.lvl<1)return"";
-  return MATCH_DATES[slot.lvl]?.[slot.idx]||"";
+  return formatLocalDate(MATCH_KICKOFFS[slot.lvl]?.[slot.idx]);
 }
 function tipHtml(n){
   const label=n.team?n.team.n:"To be decided";
